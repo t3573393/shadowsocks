@@ -23,6 +23,7 @@ import struct
 import logging
 
 
+# 适配 chr, ord 方法
 def compat_ord(s):
     if type(s) == int:
         return s
@@ -40,7 +41,7 @@ _chr = chr
 ord = compat_ord
 chr = compat_chr
 
-
+# 二进制 unicode 格式字符串转化方法， 方便python 2
 def to_bytes(s):
     if bytes != str:
         if type(s) == str:
@@ -54,6 +55,8 @@ def to_str(s):
             return s.decode('utf-8')
     return s
 
+
+# ip 地址（V4, V6）在字符串格式和 pack 格式 互相转化的方法
 
 def inet_ntop(family, ipstr):
     if family == socket.AF_INET:
@@ -96,6 +99,8 @@ def inet_pton(family, addr):
 
 
 def is_ip(address):
+    # ip 地址类型 判断， 使用转化的方法
+    # TODO 可以使用 正则表达式？
     for family in (socket.AF_INET, socket.AF_INET6):
         try:
             if type(address) != str:
@@ -108,6 +113,7 @@ def is_ip(address):
 
 
 def patch_socket():
+    # 替换系统地址转化实现
     if not hasattr(socket, 'inet_pton'):
         socket.inet_pton = inet_pton
 
@@ -120,10 +126,12 @@ patch_socket()
 
 ADDRTYPE_IPV4 = 1
 ADDRTYPE_IPV6 = 4
+# 域名地址
 ADDRTYPE_HOST = 3
 
 
 def pack_addr(address):
+    # 对ip地址进行 设定特定封包结构
     address_str = to_str(address)
     for family in (socket.AF_INET, socket.AF_INET6):
         try:
@@ -135,11 +143,17 @@ def pack_addr(address):
         except (TypeError, ValueError, OSError, IOError):
             pass
     if len(address) > 255:
-        address = address[:255]  # TODO
+        address = address[:255]
+        # TODO 可以设定为2位的 长度或者是 int
     return b'\x03' + chr(len(address)) + address
 
 
 def parse_header(data):
+    # 对 包头进行解析结构为：
+    # IP_V4 dest_addr(4) + dest_port(2)
+    # IP_V6 dest_addr(16) + dest_port(2)
+    # IP_HOST addr_len(1) + dest_host(X)
+
     addrtype = ord(data[0])
     dest_addr = None
     dest_port = None
@@ -177,11 +191,12 @@ def parse_header(data):
         return None
     return addrtype, to_bytes(dest_addr), dest_port, header_length
 
-
+# 网络地址类
 class IPNetwork(object):
     ADDRLENGTH = {socket.AF_INET: 32, socket.AF_INET6: 128, False: 0}
 
     def __init__(self, addrs):
+        # 使用传入的地址（字符串或者是 数组格式）
         self._network_list_v4 = []
         self._network_list_v6 = []
         if type(addrs) == str:
@@ -191,6 +206,7 @@ class IPNetwork(object):
     def add_network(self, addr):
         if addr is "":
             return
+        # 解析地址字符串，转化成对应的 地址 CIDR 格式
         block = addr.split('/')
         addr_family = is_ip(block[0])
         addr_len = IPNetwork.ADDRLENGTH[addr_family]
@@ -220,6 +236,7 @@ class IPNetwork(object):
 
     def __contains__(self, addr):
         addr_family = is_ip(addr)
+        # CIDR 匹配规则
         if addr_family is socket.AF_INET:
             ip, = struct.unpack("!I", socket.inet_aton(addr))
             return any(map(lambda n_ps: n_ps[0] == ip >> n_ps[1],

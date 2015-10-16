@@ -33,6 +33,10 @@ verbose = 0
 
 
 def check_python():
+    """
+    校验运行环境python, 不符合退出
+    :return:
+    """
     info = sys.version_info
     if info[0] == 2 and not info[1] >= 6:
         print('Python 2.6+ required')
@@ -46,6 +50,11 @@ def check_python():
 
 
 def print_exception(e):
+    """
+    格式化输出异常
+    :param e:
+    :return:
+    """
     global verbose
     logging.error(e)
     if verbose > 0:
@@ -54,6 +63,10 @@ def print_exception(e):
 
 
 def print_shadowsocks():
+    """
+    输出版本
+    :return:
+    """
     version = ''
     try:
         import pkg_resources
@@ -64,6 +77,10 @@ def print_shadowsocks():
 
 
 def find_config():
+    """
+    寻找配置文件路径， 默认为启动路径同级目录
+    :return:
+    """
     config_path = 'config.json'
     if os.path.exists(config_path):
         return config_path
@@ -74,22 +91,28 @@ def find_config():
 
 
 def check_config(config, is_local):
+    """
+    校验配置文件正确性
+    :param config:
+    :param is_local: 是否为本地启动（也就是客户端）
+    :return:
+    """
     if config.get('daemon', None) == 'stop':
         # no need to specify configuration for daemon stop
         return
-
+    # 本地需要密码
     if is_local and not config.get('password', None):
         logging.error('password not specified')
         print_help(is_local)
         sys.exit(2)
-
+    # 服务器，需要密码 端口密码， 管理地址
     if not is_local and not config.get('password', None) \
             and not config.get('port_password', None) \
             and not config.get('manager_address'):
         logging.error('password or port_password not specified')
         print_help(is_local)
         sys.exit(2)
-
+    # 格式转化
     if 'local_port' in config:
         config['local_port'] = int(config['local_port'])
 
@@ -121,15 +144,21 @@ def check_config(config, is_local):
         if os.name != 'posix':
             logging.error('user can be used only on Unix')
             sys.exit(1)
-
+    # 设定底层加密算法
     encrypt.try_cipher(config['password'], config['method'])
 
 
 def get_config(is_local):
+    """
+    获取配置信息： 命令行参数 > 配置文件
+    :param is_local:
+    :return:
+    """
     global verbose
 
     logging.basicConfig(level=logging.INFO,
                         format='%(levelname)-s: %(message)s')
+    # 解析启动参数
     if is_local:
         shortopts = 'hd:s:b:p:k:l:m:c:t:vq'
         longopts = ['help', 'fast-open', 'pid-file=', 'log-file=', 'user=',
@@ -139,12 +168,13 @@ def get_config(is_local):
         longopts = ['help', 'fast-open', 'pid-file=', 'log-file=', 'workers=',
                     'forbidden-ip=', 'user=', 'manager-address=', 'version']
     try:
+        # 获取配置文件路径
         config_path = find_config()
         optlist, args = getopt.getopt(sys.argv[1:], shortopts, longopts)
         for key, value in optlist:
             if key == '-c':
                 config_path = value
-
+        # 读取配置信息
         if config_path:
             logging.info('loading config from %s' % config_path)
             with open(config_path, 'rb') as f:
@@ -209,7 +239,7 @@ def get_config(is_local):
         print(e, file=sys.stderr)
         print_help(is_local)
         sys.exit(2)
-
+    # 无配置信息 抛出异常
     if not config:
         logging.error('config not specified')
         print_help(is_local)
@@ -242,7 +272,7 @@ def get_config(is_local):
             logging.error(e)
             sys.exit(2)
     config['server_port'] = config.get('server_port', None)
-
+    # 设定日志
     logging.getLogger('').handlers = []
     logging.addLevelName(VERBOSE_LEVEL, 'VERBOSE')
     if config['verbose'] >= 2:
@@ -266,6 +296,11 @@ def get_config(is_local):
 
 
 def print_help(is_local):
+    """
+    打印帮助信息
+    :param is_local:
+    :return:
+    """
     if is_local:
         print_local_help()
     else:
