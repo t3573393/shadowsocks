@@ -79,6 +79,7 @@ class LRUCache(collections.MutableMapping):
             least = self._last_visits[0]
             if now - least <= self.timeout:
                 break
+            # 比较超时的keys
             if self.close_callback is not None:
                 for key in self._time_to_keys[least]:
                     if key in self._store:

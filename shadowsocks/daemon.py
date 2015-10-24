@@ -91,7 +91,7 @@ def freopen(f, mode, stream):
 
 
 def daemon_start(pid_file, log_file):
-
+    # 启动将进程号，写入pid，替换标准输出到 log中
     def handle_exit(signum, _):
         if signum == signal.SIGTERM:
             sys.exit(0)
@@ -177,6 +177,7 @@ def daemon_stop(pid_file):
 
 
 def set_user(username):
+    # 设定运行进程的用户信息
     if username is None:
         return
 

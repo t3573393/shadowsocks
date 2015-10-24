@@ -144,6 +144,7 @@ class SelectLoop(object):
 
 class EventLoop(object):
     def __init__(self):
+        # epoll > kqueue > select
         if hasattr(select, 'epoll'):
             self._impl = select.epoll()
             model = 'epoll'
@@ -156,7 +157,7 @@ class EventLoop(object):
         else:
             raise Exception('can not find any available functions in select '
                             'package')
-        self._fdmap = {}  # (f, handler)
+        self._fdmap = {}  #fd: (f, handler)
         self._last_time = time.time()
         self._periodic_callbacks = []
         self._stopping = False

@@ -32,16 +32,19 @@ BUF_SIZE = 1506
 STAT_SEND_LIMIT = 100
 
 
+# 服务器管理工具
 class Manager(object):
 
     def __init__(self, config):
         self._config = config
-        self._relays = {}  # (tcprelay, udprelay)
+        self._relays = {}  # port: (tcprelay, udprelay)
+        # 启动事件loop
         self._loop = eventloop.EventLoop()
         self._dns_resolver = asyncdns.DNSResolver()
         self._dns_resolver.add_to_loop(self._loop)
-
+        # 统计信息
         self._statistics = collections.defaultdict(int)
+        # 控制客户端地址
         self._control_client_addr = None
         try:
             manager_address = config['manager_address']
@@ -57,6 +60,7 @@ class Manager(object):
             else:
                 addr = manager_address
                 family = socket.AF_UNIX
+            # udp bind
             self._control_socket = socket.socket(family,
                                                  socket.SOCK_DGRAM)
             self._control_socket.bind(addr)
@@ -65,6 +69,7 @@ class Manager(object):
             logging.error(e)
             logging.error('can not bind to manager address')
             exit(1)
+        # 将自身加入事件loop中
         self._loop.add(self._control_socket,
                        eventloop.POLL_IN, self)
         self._loop.add_periodic(self.handle_periodic)
@@ -85,6 +90,7 @@ class Manager(object):
                                                               port))
             return
         logging.info("adding server at %s:%d" % (config['server'], port))
+        # 启动服务relay
         t = tcprelay.TCPRelay(config, self._dns_resolver, False,
                               self.stat_callback)
         u = udprelay.UDPRelay(config, self._dns_resolver, False,
@@ -107,6 +113,7 @@ class Manager(object):
                                                          port))
 
     def handle_event(self, sock, fd, event):
+        # 只处理输入消息
         if sock == self._control_socket and event == eventloop.POLL_IN:
             data, self._control_client_addr = sock.recvfrom(BUF_SIZE)
             parsed = self._parse_command(data)
@@ -119,6 +126,7 @@ class Manager(object):
                 if 'server_port' not in a_config:
                     logging.error('can not find server_port in config')
                 else:
+                    # 执行命令，直接返回响应
                     if command == 'add':
                         self.add_port(a_config)
                         self._send_control_data(b'ok')
@@ -147,6 +155,7 @@ class Manager(object):
             return None
 
     def stat_callback(self, port, data_len):
+        # 统计端口的数据量
         self._statistics[port] += data_len
 
     def handle_periodic(self):
@@ -159,7 +168,7 @@ class Manager(object):
                 data = common.to_bytes(json.dumps(data_dict,
                                                   separators=(',', ':')))
                 self._send_control_data(b'stat: ' + data)
-
+        # 发送统计信息
         for k, v in self._statistics.items():
             r[k] = v
             i += 1
@@ -171,6 +180,7 @@ class Manager(object):
         self._statistics.clear()
 
     def _send_control_data(self, data):
+        # 发送数据给请求客户端
         if self._control_client_addr:
             try:
                 self._control_socket.sendto(data, self._control_client_addr)

@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 #!/usr/bin/env python
 #
 # Copyright 2012-2015 clowwindy
@@ -67,6 +68,7 @@ def EVP_BytesToKey(password, key_len, iv_len):
     cached_keys[cached_key] = (key, iv)
     return key, iv
 
+# 加解密类
 
 class Encryptor(object):
     def __init__(self, key, method):

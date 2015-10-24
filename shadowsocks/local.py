@@ -37,7 +37,7 @@ def main():
         os.chdir(p)
 
     config = shell.get_config(True)
-
+    # 后台启动进程判断
     daemon.daemon_exec(config)
 
     try:
@@ -47,11 +47,13 @@ def main():
         dns_resolver = asyncdns.DNSResolver()
         tcp_server = tcprelay.TCPRelay(config, dns_resolver, True)
         udp_server = udprelay.UDPRelay(config, dns_resolver, True)
+        # 启动socket事件loop
         loop = eventloop.EventLoop()
         dns_resolver.add_to_loop(loop)
         tcp_server.add_to_loop(loop)
         udp_server.add_to_loop(loop)
 
+        # 监控关闭信号
         def handler(signum, _):
             logging.warn('received SIGQUIT, doing graceful shutting down..')
             tcp_server.close(next_tick=True)
@@ -60,6 +62,7 @@ def main():
 
         def int_handler(signum, _):
             sys.exit(1)
+        # 键盘取消事件，监控
         signal.signal(signal.SIGINT, int_handler)
 
         daemon.set_user(config.get('user', None))
