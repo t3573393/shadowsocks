@@ -34,7 +34,7 @@ def main():
     config = shell.get_config(False)
 
     daemon.daemon_exec(config)
-
+    # 分拆 端口和密码： port_password > (server_port, password)
     if config['port_password']:
         if config['password']:
             logging.warn('warning: port_password should not be used with '
@@ -87,6 +87,7 @@ def main():
         signal.signal(signal.SIGINT, int_handler)
 
         try:
+            # 启动所有的 dns, udp, tcp 实例
             loop = eventloop.EventLoop()
             dns_resolver.add_to_loop(loop)
             list(map(lambda s: s.add_to_loop(loop), tcp_servers + udp_servers))
@@ -123,6 +124,7 @@ def main():
                 signal.signal(signal.SIGQUIT, handler)
                 signal.signal(signal.SIGINT, handler)
 
+                # 关闭父实例， 等待子进程
                 # master
                 for a_tcp_server in tcp_servers:
                     a_tcp_server.close()
