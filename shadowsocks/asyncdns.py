@@ -26,7 +26,7 @@ import logging
 
 from shadowsocks import common, lru_cache, eventloop, shell
 
-
+# rpc 1035,实现的 dns解析， 只能解析dns ip为 ipv4， 需要处理 ， 容易被污染
 CACHE_SWEEP_INTERVAL = 30
 
 VALID_HOSTNAME = re.compile(br"(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
@@ -254,13 +254,16 @@ class DNSResolver(object):
         self._hostname_status = {}
         self._hostname_to_cb = {}
         self._cb_to_hostname = {}
+        # 300 秒生命周期， 结果存放 hostname: ip
         self._cache = lru_cache.LRUCache(timeout=300)
         self._sock = None
+        # 读取本地的 resolv.conf 文件, 获取域名服务器ip
         if server_list is None:
             self._servers = None
             self._parse_resolv()
         else:
             self._servers = server_list
+        # 本地host文件
         self._parse_hosts()
         # TODO monitor hosts change and reload hosts
         # TODO parse /etc/gai.conf and follow its rules
@@ -317,6 +320,7 @@ class DNSResolver(object):
         loop.add_periodic(self.handle_periodic)
 
     def _call_callback(self, hostname, ip, error=None):
+        # 调用回调，清空回调之间的映射
         callbacks = self._hostname_to_cb.get(hostname, [])
         for callback in callbacks:
             if callback in self._cb_to_hostname:
@@ -336,6 +340,7 @@ class DNSResolver(object):
         if response and response.hostname:
             hostname = response.hostname
             ip = None
+            # 多个dns解析结果， 使用第一个， 容易被污染
             for answer in response.answers:
                 if answer[1] in (QTYPE_A, QTYPE_AAAA) and \
                         answer[2] == QCLASS_IN:
@@ -343,6 +348,7 @@ class DNSResolver(object):
                     break
             if not ip and self._hostname_status.get(hostname, STATUS_IPV6) \
                     == STATUS_IPV4:
+                # ipv4 找不到 找ipv6
                 self._hostname_status[hostname] = STATUS_IPV6
                 self._send_req(hostname, QTYPE_AAAA)
             else:
@@ -350,6 +356,7 @@ class DNSResolver(object):
                     self._cache[hostname] = ip
                     self._call_callback(hostname, ip)
                 elif self._hostname_status.get(hostname, None) == STATUS_IPV6:
+                    # ipv6 没找到直接回调
                     for question in response.questions:
                         if question[1] == QTYPE_AAAA:
                             self._call_callback(hostname, None)
@@ -359,6 +366,7 @@ class DNSResolver(object):
         if sock != self._sock:
             return
         if event & eventloop.POLL_ERR:
+            # 错误重新启动 socket 绑定到事件中
             logging.error('dns socket err')
             self._loop.remove(self._sock)
             self._sock.close()
@@ -399,6 +407,7 @@ class DNSResolver(object):
     def resolve(self, hostname, callback):
         if type(hostname) != bytes:
             hostname = hostname.encode('utf8')
+        # 是否已经为ip > 本地hosts > 缓存 > 解析
         if not hostname:
             callback(None, Exception('empty hostname'))
         elif common.is_ip(hostname):
@@ -412,6 +421,8 @@ class DNSResolver(object):
             ip = self._cache[hostname]
             callback((hostname, ip), None)
         else:
+            # hostname : [callback]
+            # callback : hostname 结构的维护
             if not is_valid_hostname(hostname):
                 callback(None, Exception('invalid hostname: %s' % hostname))
                 return

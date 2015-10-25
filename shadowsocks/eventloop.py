@@ -31,7 +31,7 @@ from collections import defaultdict
 
 from shadowsocks import shell
 
-
+# 网络事件loop， 按照优先级实现 事件回调的网络事件
 __all__ = ['EventLoop', 'POLL_NULL', 'POLL_IN', 'POLL_OUT', 'POLL_ERR',
            'POLL_HUP', 'POLL_NVAL', 'EVENT_NAMES']
 
@@ -218,6 +218,7 @@ class EventLoop(object):
                     except (OSError, IOError) as e:
                         shell.print_exception(e)
             now = time.time()
+            # 超时处理
             if asap or now - self._last_time >= TIMEOUT_PRECISION:
                 for callback in self._periodic_callbacks:
                     callback()

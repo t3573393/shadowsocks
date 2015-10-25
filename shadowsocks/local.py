@@ -28,6 +28,7 @@ from shadowsocks import shell, daemon, eventloop, tcprelay, udprelay, asyncdns
 
 
 def main():
+    # 运行环境版本判断
     shell.check_python()
 
     # fix py2exe

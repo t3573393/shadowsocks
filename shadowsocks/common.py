@@ -111,7 +111,7 @@ def is_ip(address):
             pass
     return False
 
-
+# string 互相 bytes 替换函数
 def patch_socket():
     # 替换系统地址转化实现
     if not hasattr(socket, 'inet_pton'):

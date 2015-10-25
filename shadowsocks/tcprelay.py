@@ -96,6 +96,8 @@ class TCPRelayHandler(object):
         self._server = server
         self._fd_to_handlers = fd_to_handlers
         self._loop = loop
+        # local socket 为本地监听之后，得到的链接，
+        # 如果在客户端就是 客户端的程序， 服务端的话就是 客户端的sslocal
         self._local_sock = local_sock
         self._remote_sock = None
         self._config = config
@@ -112,6 +114,7 @@ class TCPRelayHandler(object):
         self._data_to_write_to_remote = []
         self._upstream_status = WAIT_STATUS_READING
         self._downstream_status = WAIT_STATUS_INIT
+        # 本地地址
         self._client_address = local_sock.getpeername()[:2]
         self._remote_address = None
         if 'forbidden_ip' in config:
@@ -120,6 +123,7 @@ class TCPRelayHandler(object):
             self._forbidden_iplist = None
         if is_local:
             self._chosen_server = self._get_a_server()
+        # 这里有循环引用， 不好
         fd_to_handlers[local_sock.fileno()] = self
         local_sock.setblocking(False)
         local_sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
@@ -138,6 +142,7 @@ class TCPRelayHandler(object):
         return self._remote_address
 
     def _get_a_server(self):
+        # 如果是数组，随机获取一个
         server = self._config['server']
         server_port = self._config['server_port']
         if type(server_port) == list:
@@ -224,6 +229,7 @@ class TCPRelayHandler(object):
 
     def _handle_stage_connecting(self, data):
         if self._is_local:
+            # 本地加密数据
             data = self._encryptor.encrypt(data)
         self._data_to_write_to_remote.append(data)
         if self._is_local and not self._fastopen_connected and \
@@ -308,6 +314,7 @@ class TCPRelayHandler(object):
                 self._dns_resolver.resolve(self._chosen_server[0],
                                            self._handle_dns_resolved)
             else:
+                # 服务器直接 将数据转发给远程地址， 在 _on_local_read 已经解密
                 if len(data) > header_length:
                     self._data_to_write_to_remote.append(data[header_length:])
                 # notice here may go into _handle_dns_resolved directly
@@ -337,6 +344,7 @@ class TCPRelayHandler(object):
         return remote_sock
 
     def _handle_dns_resolved(self, result, error):
+        # result (hostname , ip)
         if error:
             self._log_error(error)
             self.destroy()
@@ -344,7 +352,6 @@ class TCPRelayHandler(object):
         if result:
             ip = result[1]
             if ip:
-
                 try:
                     self._stage = STAGE_CONNECTING
                     remote_addr = ip
@@ -402,6 +409,7 @@ class TCPRelayHandler(object):
             return
         self._update_activity(len(data))
         if not is_local:
+            # 服务端解密
             data = self._encryptor.decrypt(data)
             if not data:
                 return
@@ -423,6 +431,7 @@ class TCPRelayHandler(object):
 
     def _on_remote_read(self):
         # handle all remote read events
+        # 从remote将数据 转发给 local
         data = None
         try:
             data = self._remote_sock.recv(BUF_SIZE)
@@ -450,6 +459,7 @@ class TCPRelayHandler(object):
 
     def _on_local_write(self):
         # handle local writable event
+        # 将数据返回给local， 如果没有标记为 等待下行 读
         if self._data_to_write_to_local:
             data = b''.join(self._data_to_write_to_local)
             self._data_to_write_to_local = []
@@ -459,6 +469,7 @@ class TCPRelayHandler(object):
 
     def _on_remote_write(self):
         # handle remote writable event
+        # 将数据 发送给remote ， 如果没有标记为 等待上行 读
         self._stage = STAGE_STREAM
         if self._data_to_write_to_remote:
             data = b''.join(self._data_to_write_to_remote)
@@ -481,6 +492,7 @@ class TCPRelayHandler(object):
 
     def handle_event(self, sock, event):
         # handle all events in this handler and dispatch them to methods
+        # 维护一个本地的状态机，进行数据的交互
         if self._stage == STAGE_DESTROYED:
             logging.debug('ignore handle_event: destroyed')
             return
@@ -558,6 +570,7 @@ class TCPRelay(object):
         self._fd_to_handlers = {}
 
         self._timeout = config['timeout']
+        # 尾部的时间比前面的大
         self._timeouts = []  # a list for all the handlers
         # we trim the timeouts once a while
         self._timeout_offset = 0   # last checked position for timeout
@@ -609,10 +622,13 @@ class TCPRelay(object):
             del self._handler_to_timeouts[hash(handler)]
 
     def update_activity(self, handler, data_len):
+        # 设定指定handler是活跃的
+
+        # 状态变化回调
         if data_len and self._stat_callback:
             self._stat_callback(self._listen_port, data_len)
 
-        # set handler to active
+        # set handler to active， 重新激活处理函数
         now = int(time.time())
         if now - handler.last_activity < eventloop.TIMEOUT_PRECISION:
             # thus we can lower timeout modification frequency
@@ -634,10 +650,12 @@ class TCPRelay(object):
             logging.log(shell.VERBOSE_LEVEL, 'sweeping timeouts')
             now = time.time()
             length = len(self._timeouts)
+            # 延续上次检测的点， 由于没有真的删除只能不断的递增下标
             pos = self._timeout_offset
             while pos < length:
                 handler = self._timeouts[pos]
                 if handler:
+                    # 未超时不停止
                     if now - handler.last_activity < self._timeout:
                         break
                     else:
@@ -685,6 +703,7 @@ class TCPRelay(object):
                     if self._config['verbose']:
                         traceback.print_exc()
         else:
+            # 未找到匹配当前，找处理函数
             if sock:
                 handler = self._fd_to_handlers.get(fd, None)
                 if handler:
@@ -693,6 +712,7 @@ class TCPRelay(object):
                 logging.warn('poll removed fd')
 
     def handle_periodic(self):
+        # 关闭
         if self._closed:
             if self._server_socket:
                 self._eventloop.remove(self._server_socket)
@@ -707,6 +727,7 @@ class TCPRelay(object):
     def close(self, next_tick=False):
         logging.debug('TCP close')
         self._closed = True
+        # 马上关闭
         if not next_tick:
             if self._eventloop:
                 self._eventloop.remove_periodic(self.handle_periodic)
